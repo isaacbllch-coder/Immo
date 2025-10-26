@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Diaporama ultra simple</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #111111;
+    }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    .page {
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+    }
+    .diapo {
+      position: relative;
+      width: min(90vw, 1200px);
+      height: min(80vh, 800px);
+      display: grid;
+      place-items: center;
+      user-select: none;
+      cursor: default;
+      outline: none;
+    }
+    .diapo img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+      border-radius: 8px;
+    }
+    .hint {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,255,255,0.7);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 14px;
+      backdrop-filter: blur(6px);
+    }
+    .fullscreen-btn {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .fullscreen-btn:hover {
+      background: #333;
+    }
+    .hitzone {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 45%;
+    }
+    .hitzone.left { left: 0; }
+    .hitzone.right { right: 0; }
+    .hitzone { cursor: pointer; }
+    :fullscreen .diapo,
+    .diapo:fullscreen {
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <figure class="diapo" id="diapo" tabindex="-1" aria-label="Diaporama – utilisez les flèches gauche/droite et double-cliquez ou bouton pour le plein écran">
+      <img id="photo" src="DIAPO1.jpg" alt="Photo du diaporama" />
+      <div class="hitzone left" aria-hidden="true"></div>
+      <div class="hitzone right" aria-hidden="true"></div>
+      <figcaption class="hint">← / → pour changer</figcaption>
+      <button class="fullscreen-btn" id="fullscreenBtn">Plein écran</button>
+    </figure>
+  </div>
+
+  <script>
+    const photos = [
+      'DIAPO1.jpg',
+      'DIAPO2.jpg',
+      'DIAPO3.jpg',
+      'DIAPO4.jpg',
+      'DIAPO5.jpg',
+      'DIAPO6.jpg',
+      'DIAPO7.jpg',
+    ];
+
+    const preload = photos.map(src => { const i = new Image(); i.src = src; return i; });
+
+    const img = document.getElementById('photo');
+    const diapo = document.getElementById('diapo');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+    img.addEventListener('error', () => {
+      console.error('Image introuvable :', img.src);
+      img.alt = 'Image introuvable : ' + img.src;
+    });
+
+    let index = 0;
+
+    function show(i) {
+      index = (i + photos.length) % photos.length;
+      img.src = photos[index];
+    }
+
+    function next() { show(index + 1); }
+    function prev() { show(index - 1); }
+
+    async function toggleFullscreen() {
+      try {
+        if (!document.fullscreenElement) {
+          await diapo.requestFullscreen();
+        } else {
+          await document.exitFullscreen();
+        }
+      } catch (err) {
+        console.warn('Plein écran non autorisé :', err);
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); prev(); }
+      if (e.key === 'Escape' && document.fullscreenElement) {
+        document.exitFullscreen();
+      }
+    });
+
+    diapo.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      toggleFullscreen();
+    });
+
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    diapo.querySelector('.hitzone.left').addEventListener('click', prev);
+    diapo.querySelector('.hitzone.right').addEventListener('click', next);
+
+    diapo.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    show(0);
+  </script>
+</body>
+</html>
