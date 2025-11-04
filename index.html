@@ -98,12 +98,10 @@
     function crossfadeTo(src){
       const oldL = activeLayer();
       const newL = inactiveLayer();
-      // Charger la prochaine image sur le calque caché, puis crossfade
       const onload = () => {
-        // afficha ge : nouveau calque en fondu entrant, ancien en fondu sortant
         newL.classList.add('show');
         oldL.classList.remove('show');
-        activeIsA = !activeIsA; // inverser les rôles une fois l'anim lancée
+        activeIsA = !activeIsA;
         newL.removeEventListener('load', onload);
       };
       newL.addEventListener('load', onload);
@@ -113,46 +111,26 @@
     function show(i){
       if(i<0) i=0; if(i>idx.last) i=idx.last;
       current = i;
-
       const nextSrc = files[current];
-      // si premier affichage, mettre la première image directement
       if(!layerA.getAttribute('src') && !layerB.getAttribute('src')){
         layerA.setAttribute('src', nextSrc);
         layerA.classList.add('show');
       } else {
-        // vrai crossfade 1s
-        if(activeLayer().getAttribute('src') !== nextSrc){
-          crossfadeTo(nextSrc);
-        }
+        if(activeLayer().getAttribute('src') !== nextSrc){ crossfadeTo(nextSrc); }
       }
-
-      // Précharger la suivante
       preload(current+1);
-
-      // Gestion des règles au moment de l'affichage
       clearTimer();
-
-      if(current===idx.first){
-        playing = false; // 001: en pause initiale
-      } else if(current===idx.stop1){
-        // Arrêt automatique sur 006
-        playing = false;
-      } else if(current===idx.resumeAt){
-        // À 007 : reprise auto immédiate (si pas en fin de diapo)
-        if(current<idx.last){
-          playing = true; scheduleNext();
-        }
-      } else if(isAutoAllowedAt(current) && playing){
-        scheduleNext();
-      }
-
+      if(current===idx.first){ playing = false; }
+      else if(current===idx.stop1){ playing = false; }
+      else if(current===idx.resumeAt){ if(current<idx.last){ playing = true; scheduleNext(); } }
+      else if(isAutoAllowedAt(current) && playing){ scheduleNext(); }
       updateSizeBtn();
     }
 
     function scheduleNext(){
       clearTimer();
       if(!isAutoAllowedAt(current)) return;
-      timer = setTimeout(()=>{ go(+1, /*autoTick*/true); }, 7000);
+      timer = setTimeout(()=>{ go(+1,true); }, 10000);
     }
     function clearTimer(){ if(timer){ clearTimeout(timer); timer=null; } }
 
@@ -165,36 +143,24 @@
       show(next);
     }
 
-    // --- Contrôles clavier ---
     window.addEventListener('keydown', (e)=>{
       if([" ","Spacebar","Space"].includes(e.key)) e.preventDefault();
       switch(e.key){
         case ' ': case 'Spacebar': case 'Space':
-          if(current===idx.first){
-            show(current+1); playing = true; scheduleNext();
-          } else if(isInManualGate(current)){
-            // pas d'effet dans la zone manuelle
-          } else if(current===idx.last){
-            playing = false; clearTimer();
-          } else {
-            playing = !playing; if(playing){ scheduleNext(); } else { clearTimer(); }
-          }
+          if(current===idx.first){ show(current+1); playing = true; scheduleNext(); }
+          else if(isInManualGate(current)){}
+          else if(current===idx.last){ playing = false; clearTimer(); }
+          else { playing = !playing; if(playing){ scheduleNext(); } else { clearTimer(); } }
         break;
         case 'ArrowRight': go(+1); break;
         case 'ArrowLeft' : go(-1); break;
-        default: break;
       }
     }, {passive:false});
 
-    // --- Mode "Agrandir" (théâtre) ---
     function isTheater(){ return wrap.classList.contains('theater'); }
     function updateSizeBtn(){ sizeBtn.textContent = isTheater()? 'Réduire' : 'Agrandir'; }
-    sizeBtn.addEventListener('click', ()=>{
-      wrap.classList.toggle('theater');
-      updateSizeBtn();
-    });
+    sizeBtn.addEventListener('click', ()=>{ wrap.classList.toggle('theater'); updateSizeBtn(); });
 
-    // --- Démarrage : afficher 001 (pausé) ---
     show(current);
   })();
   </script>
