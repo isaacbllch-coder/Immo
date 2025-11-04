@@ -1,161 +1,424 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Diaporama ultra simple</title>
+  <title>Diaporama – Démo</title>
   <style>
     :root {
-      --bg: #ffffff;
-      --fg: #111111;
+      --bg: #ffeed5;
+      --fade-ms: 600ms; /* configurable (JS peut aussi l'écraser) */
     }
+
     html, body {
       height: 100%;
       margin: 0;
       background: var(--bg);
-      color: var(--fg);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      color: #222;
     }
+
     .page {
       min-height: 100dvh;
       display: grid;
+      grid-template-rows: 1fr auto 1fr;
       place-items: center;
     }
-    .diapo {
-      position: relative;
-      width: min(90vw, 1200px);
-      height: min(80vh, 800px);
+
+    .wrapper {
+      grid-row: 2;
       display: grid;
+      gap: 12px;
       place-items: center;
-      user-select: none;
-      cursor: default;
+    }
+
+    /* Cadre du diaporama */
+    .slideshow {
+      position: relative;
+      width: min(92vw, 1536px);
+      aspect-ratio: 3 / 2; /* images 1536×1024 (3:2) */
+      background: #f7dcb9;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,.08);
       outline: none;
     }
-    .diapo img {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-      display: block;
-      border-radius: 8px;
-    }
-    .hint {
-      position: absolute;
-      bottom: 40px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(255,255,255,0.7);
-      border-radius: 999px;
-      padding: 6px 12px;
-      font-size: 14px;
-      backdrop-filter: blur(6px);
-    }
-    .fullscreen-btn {
-      position: absolute;
-      bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #111;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      padding: 8px 16px;
-      cursor: pointer;
-      font-size: 14px;
-    }
-    .fullscreen-btn:hover {
-      background: #333;
-    }
-    .hitzone {
-      position: absolute;
-      top: 0; bottom: 0;
-      width: 45%;
-    }
-    .hitzone.left { left: 0; }
-    .hitzone.right { right: 0; }
-    .hitzone { cursor: pointer; }
-    :fullscreen .diapo,
-    .diapo:fullscreen {
+    .slideshow:focus-visible { box-shadow: 0 0 0 4px #1111; }
+
+    /* Plein écran : on centre l'image et on évite tout crop, tout en la bloquant à 1536×1024 max */
+    .slideshow:fullscreen {
       width: 100vw;
       height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f7dcb9;
     }
+    .slideshow:fullscreen .layer { display: flex; align-items: center; justify-content: center; }
+    .slideshow:fullscreen .layer img { width: min(100vw, 1536px); height: auto; max-height: min(100vh, 1024px); aspect-ratio: 3/2; }
+
+    .layer {
+      position: absolute;
+      inset: 0;
+      display: flex;            /* centre parfaitement l'image */
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity var(--fade-ms) ease;
+    }
+
+    .layer.active { opacity: 1; }
+
+    .layer img {
+      /* On bloque la taille intrinsèque à 1536×1024, mais on autorise la réduction pour s'adapter au cadre */
+      width: min(100%, 1536px);
+      height: auto;
+      aspect-ratio: 3 / 2;
+      user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
+    }
+
+    /* Overlay état (pause, aide) */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+
+    .badge {
+      display: none !important; /* on supprime l'affichage du badge Pause */
+    } /* badge Pause supprimé visuellement, fonctionnalité conservée */
+
+    .hint {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,.35);
+      color: #fff;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      display: none;
+    }
+
+    .hint.show { display: inline-block; }
+
+    /* Boutons */
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      width: 100%;
+    }
+    button {
+      appearance: none;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 0;
+      background: #2c2c2c;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(0,0,0,.15);
+    }
+    button:focus-visible { outline: 3px solid #00000022; }
+
+    .fs-label[aria-pressed="true"]::after { content: " (plein écran)"; font-weight: 400; opacity: .85; }
+
   </style>
 </head>
 <body>
   <div class="page">
-    <figure class="diapo" id="diapo" tabindex="-1" aria-label="Diaporama – utilisez les flèches gauche/droite et double-cliquez ou bouton pour le plein écran">
-      <img id="photo" src="DIAPO1.jpg" alt="Photo du diaporama" />
-      <div class="hitzone left" aria-hidden="true"></div>
-      <div class="hitzone right" aria-hidden="true"></div>
-      <figcaption class="hint">← / → pour changer</figcaption>
-      <button class="fullscreen-btn" id="fullscreenBtn">Plein écran</button>
-    </figure>
+    <div class="wrapper">
+      <div class="slideshow" id="slideshow" tabindex="0" aria-label="Diaporama – utilisez Espace pour lecture/pause et ←/→ pour naviguer">
+        <div class="layer active" id="layerA"><img alt="" /></div>
+        <div class="layer" id="layerB"><img alt="" /></div>
+        <div class="overlay">
+          <span class="badge" id="stateBadge" hidden>
+            <!-- Icône pause (II) -->
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <rect x="6" y="4" width="4" height="16" rx="1.5" fill="currentColor"/>
+              <rect x="14" y="4" width="4" height="16" rx="1.5" fill="currentColor"/>
+            </svg>
+            Pause
+          </span>
+          <span class="hint" id="hint"></span>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="fsBtn" class="fs-label" aria-pressed="false" title="Mettre en plein écran (Esc pour quitter)">Plein écran</button>
+      </div>
+    </div>
   </div>
 
   <script>
-    const photos = [
-      'DIAPO1.jpg',
-      'DIAPO2.jpg',
-      'DIAPO3.jpg',
-      'DIAPO4.jpg',
-      'DIAPO5.jpg',
-      'DIAPO6.jpg',
-      'DIAPO7.jpg',
-    ];
+    // ————— Configuration ————————————————————————————————————————————————
+    const CONFIG = {
+      images: [
+        "001.png","002.png","003.png","004.png","005.png","006.png",
+        "0061.png","0062.png","0063.png",
+        "007.png","008.png","009.png","010.png",
+      ],
+      advanceDelayMs: 7000,   // 7s
+      fadeMs: 600,            // doit refléter --fade-ms du CSS
+      initialGateRequiresSpace: true, // à l'image 001: seule la barre d'espace démarre
+    };
 
-    const preload = photos.map(src => { const i = new Image(); i.src = src; return i; });
+    // ————— Éléments DOM ————————————————————————————————————————————————
+    const ss      = document.getElementById('slideshow');
+    const layerA  = document.getElementById('layerA');
+    const layerB  = document.getElementById('layerB');
+    const imgA    = layerA.querySelector('img');
+    const imgB    = layerB.querySelector('img');
+    const badge   = document.getElementById('stateBadge');
+    const hintEl  = document.getElementById('hint');
+    const fsBtn   = document.getElementById('fsBtn');
 
-    const img = document.getElementById('photo');
-    const diapo = document.getElementById('diapo');
-    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    // ————— État ————————————————————————————————————————————————————————
+    let idx = 0;                 // index courant dans CONFIG.images
+    let activeIsA = true;        // quelle couche est affichée
+    let timer = null;            // timeout ID pour l'auto-avance
+    let playing = false;         // lecture automatique en cours ?
+    let inManualGate = false;    // blocage manuel entre 006 et 007
+    let inInitialGate = CONFIG.initialGateRequiresSpace; // blocage initial sur 001
 
-    img.addEventListener('error', () => {
-      console.error('Image introuvable :', img.src);
-      img.alt = 'Image introuvable : ' + img.src;
-    });
+    // indices utiles
+    const IDX_001 = 0;
+    const IDX_006 = CONFIG.images.indexOf('006.png');
+    const IDX_007 = CONFIG.images.indexOf('007.png');
+    const IDX_010 = CONFIG.images.indexOf('010.png');
 
-    let index = 0;
+    // ————— Préchargement ———————————————————————————————————————————————
+    const cache = new Map();
+    function preload(src) {
+      if (cache.has(src)) return;
+      const im = new Image();
+      im.src = src;
+      cache.set(src, im);
+    }
+    CONFIG.images.forEach(preload);
 
-    function show(i) {
-      index = (i + photos.length) % photos.length;
-      img.src = photos[index];
+    // ————— Affichage initial ————————————————————————————————————————
+    function setCSSFade(ms) {
+      document.documentElement.style.setProperty('--fade-ms', ms + 'ms');
+    }
+    setCSSFade(CONFIG.fadeMs);
+
+    function showAt(index, {animate=true} = {}) {
+      index = Math.max(0, Math.min(CONFIG.images.length - 1, index));
+      const src = CONFIG.images[index];
+      const nextImg = activeIsA ? imgB : imgA;
+      nextImg.src = src;
+
+      // Crossfade
+      const nextLayer  = activeIsA ? layerB : layerA;
+      const currLayer  = activeIsA ? layerA : layerB;
+
+      if (!animate) {
+        currLayer.classList.remove('active');
+        nextLayer.classList.add('active');
+      } else {
+        nextLayer.offsetHeight; // reflow
+        nextLayer.classList.add('active');
+        currLayer.classList.remove('active');
+      }
+
+      activeIsA = !activeIsA;
+      idx = index;
+      updateHints();
     }
 
-    function next() { show(index + 1); }
-    function prev() { show(index - 1); }
+    function updateHints() {
+      // Petites indications contextuelles (sans badge Pause)
+      if (inInitialGate && idx === IDX_001) {
+        hintEl.textContent = 'Appuyez sur ESPACE pour démarrer';
+        hintEl.classList.add('show');
+        showBadge(false);
+      } else if (inManualGate && idx >= IDX_006 && idx < IDX_007) {
+        hintEl.textContent = 'Utilisez ← / → pour avancer manuellement jusqu\'à 007';
+        hintEl.classList.add('show');
+        showBadge(false);
+      } else if (!playing) {
+        hintEl.textContent = 'Pause — ESPACE pour reprendre';
+        hintEl.classList.add('show');
+        showBadge(false);
+      } else {
+        hintEl.textContent = '';
+        hintEl.classList.remove('show');
+        showBadge(false);
+      }
+    } else if (inManualGate && idx >= IDX_006 && idx < IDX_007) {
+        hintEl.textContent = 'Utilisez ← / → pour avancer manuellement jusqu\'à 007';
+        hintEl.classList.add('show');
+        showBadge(true);
+      } else if (!playing) {
+        hintEl.textContent = 'Pause — ESPACE pour reprendre';
+        hintEl.classList.add('show');
+        showBadge(true);
+      } else {
+        hintEl.textContent = '';
+        hintEl.classList.remove('show');
+        showBadge(false);
+      }
+    }
 
+    function showBadge(show) {
+      badge.hidden = !show;
+    }
+
+    // ————— Lecture / Pause / Auto-avance ————————————————————————————
+    function scheduleNext() {
+      clearTimer();
+      if (!playing) return;
+
+      // Stop si on est à la dernière image
+      if (idx >= IDX_010) {
+        setPlaying(false);
+        return;
+      }
+
+      // Blocage manuel déclenché à 006
+      if (idx === IDX_006) {
+        setPlaying(false);
+        inManualGate = true; // maintenant, flèches uniquement jusqu'à 007
+        updateHints();
+        return;
+      }
+
+      timer = setTimeout(() => {
+        // Si on va atteindre 006, on passe quand même (l'arrêt se fera au tick suivant)
+        goRelative(+1);
+
+        // Si on vient d\'atteindre 007 et qu\'on sortait du gate manuel, on relance (garanti ailleurs aussi)
+        if (idx === IDX_007 && inManualGate) {
+          inManualGate = false;
+          setPlaying(true);
+        } else {
+          scheduleNext();
+        }
+      }, CONFIG.advanceDelayMs);
+    }
+
+    function clearTimer() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    function setPlaying(next) {
+      playing = !!next;
+      updateHints();
+      if (playing) scheduleNext(); else clearTimer();
+    }
+
+    // ————— Navigation ———————————————————————————————————————————————
+    function goRelative(delta) {
+      let target = idx + delta;
+      target = Math.max(0, Math.min(CONFIG.images.length - 1, target));
+      if (target === idx) return;
+      showAt(target);
+
+      // Règles spéciales après navigation manuelle
+      if (inInitialGate && idx > IDX_001) {
+        // Théoriquement impossible car on bloque les flèches au gate initial
+        inInitialGate = false;
+      }
+
+      if (inManualGate && idx === IDX_007) {
+        inManualGate = false;
+        setPlaying(true);
+      }
+
+      if (idx >= IDX_010) {
+        setPlaying(false);
+      }
+    }
+
+    // ————— Gestion du clavier ————————————————————————————————————————
+    function onKey(e) {
+      // Empêche le scroll avec barre d'espace
+      if (e.code === 'Space') e.preventDefault();
+
+      // Gate initial : seule la barre d'espace permet de démarrer (001 → 002)
+      if (inInitialGate && idx === IDX_001) {
+        if (e.code === 'Space') {
+          inInitialGate = false;
+          showAt(IDX_001 + 1); // va à 002
+          setPlaying(true);
+        }
+        return; // autres touches ignorées au gate initial
+      }
+
+      // Gate manuel (entre 006 et 007) : flèches uniquement
+      if (inManualGate) {
+        if (e.key === 'ArrowRight') {
+          goRelative(+1);
+        } else if (e.key === 'ArrowLeft') {
+          goRelative(-1);
+        }
+        return; // espace n'a pas d'effet en gate manuel
+      }
+
+      // Contrôles généraux
+      switch (e.key) {
+        case ' ': // Espace (certaines implémentations)
+        case 'Spacebar':
+        case 'Space':
+          setPlaying(!playing);
+          break;
+        case 'ArrowRight':
+          goRelative(+1);
+          break;
+        case 'ArrowLeft':
+          goRelative(-1);
+          break;
+      }
+    }
+
+    // ————— Plein écran ———————————————————————————————————————————————
     async function toggleFullscreen() {
       try {
         if (!document.fullscreenElement) {
-          await diapo.requestFullscreen();
+          await ss.requestFullscreen();
+          fsBtn.setAttribute('aria-pressed', 'true');
         } else {
           await document.exitFullscreen();
+          fsBtn.setAttribute('aria-pressed', 'false');
         }
       } catch (err) {
-        console.warn('Plein écran non autorisé :', err);
+        console.error(err);
       }
     }
 
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
-      if (e.key === 'ArrowLeft')  { e.preventDefault(); prev(); }
-      if (e.key === 'Escape' && document.fullscreenElement) {
-        document.exitFullscreen();
-      }
+    document.addEventListener('fullscreenchange', () => {
+      const on = !!document.fullscreenElement;
+      fsBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
 
-    diapo.addEventListener('dblclick', (e) => {
-      e.stopPropagation();
-      toggleFullscreen();
-    });
+    // ————— Initialisation ————————————————————————————————————————————
+    function init() {
+      // Image 001 dès l'arrivée
+      showAt(IDX_001, {animate:false});
 
-    fullscreenBtn.addEventListener('click', toggleFullscreen);
+      // Focus pour capter le clavier (un clic sur le cadre marche aussi)
+      ss.focus({preventScroll:true});
 
-    diapo.querySelector('.hitzone.left').addEventListener('click', prev);
-    diapo.querySelector('.hitzone.right').addEventListener('click', next);
+      // État de pause affiché
+      updateHints();
+    }
 
-    diapo.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Écoutes
+    document.addEventListener('keydown', onKey);
+    fsBtn.addEventListener('click', toggleFullscreen);
+    ss.addEventListener('click', () => ss.focus());
 
-    show(0);
+    // Lancement
+    init();
   </script>
 </body>
 </html>
