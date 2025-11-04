@@ -1,424 +1,202 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Diaporama – Démo</title>
+  <title>Diaporama contrôlé</title>
   <style>
-    :root {
-      --bg: #ffeed5;
-      --fade-ms: 600ms; /* configurable (JS peut aussi l'écraser) */
+    :root{
+      --bg:#ffeed5;
+      --duration:7000ms; /* 7 s */
+      --fade:1000ms;     /* fondu 1s réel (crossfade) */
+      --radius:20px;
+      --shadow: 0 10px 30px rgba(0,0,0,.15);
     }
-
-    html, body {
-      height: 100%;
-      margin: 0;
-      background: var(--bg);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
-      color: #222;
+    html,body{height:100%;}
+    body{
+      margin:0; background:var(--bg);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+      color:#1f2937; display:grid; place-items:center;
     }
-
-    .page {
-      min-height: 100dvh;
-      display: grid;
-      grid-template-rows: 1fr auto 1fr;
-      place-items: center;
+    .wrap{
+      width:min(92vw,1100px);
+      display:flex; flex-direction:column; align-items:center; gap:16px; padding:24px 16px 40px;
+      transition: width .25s ease;
     }
+    /* Mode agrandi (théâtre), sans plein écran */
+    .wrap.theater{ width:min(98vw,1600px); }
 
-    .wrapper {
-      grid-row: 2;
-      display: grid;
-      gap: 12px;
-      place-items: center;
+    .stage{
+      position:relative; width:100%; aspect-ratio:3/2; /* 1536x1024 = 3:2 */
+      background:#fff8ee; border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; outline:1px solid rgba(0,0,0,.06);
     }
-
-    /* Cadre du diaporama */
-    .slideshow {
-      position: relative;
-      width: min(92vw, 1536px);
-      aspect-ratio: 3 / 2; /* images 1536×1024 (3:2) */
-      background: #f7dcb9;
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0,0,0,.08);
-      outline: none;
+    /* Pile de deux calques pour un vrai crossfade */
+    .stage img.layer{
+      position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#fff8ee;
+      opacity:0; transition:opacity var(--fade) linear; user-select:none; -webkit-user-drag:none;
     }
-    .slideshow:focus-visible { box-shadow: 0 0 0 4px #1111; }
+    .stage img.layer.show{ opacity:1; }
 
-    /* Plein écran : on centre l'image et on évite tout crop, tout en la bloquant à 1536×1024 max */
-    .slideshow:fullscreen {
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #f7dcb9;
-    }
-    .slideshow:fullscreen .layer { display: flex; align-items: center; justify-content: center; }
-    .slideshow:fullscreen .layer img { width: min(100vw, 1536px); height: auto; max-height: min(100vh, 1024px); aspect-ratio: 3/2; }
-
-    .layer {
-      position: absolute;
-      inset: 0;
-      display: flex;            /* centre parfaitement l'image */
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity var(--fade-ms) ease;
-    }
-
-    .layer.active { opacity: 1; }
-
-    .layer img {
-      /* On bloque la taille intrinsèque à 1536×1024, mais on autorise la réduction pour s'adapter au cadre */
-      width: min(100%, 1536px);
-      height: auto;
-      aspect-ratio: 3 / 2;
-      user-select: none;
-      -webkit-user-drag: none;
-      pointer-events: none;
-    }
-
-    /* Overlay état (pause, aide) */
-    .overlay {
-      position: absolute;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      pointer-events: none;
-    }
-
-    .badge {
-      display: none !important; /* on supprime l'affichage du badge Pause */
-    } /* badge Pause supprimé visuellement, fonctionnalité conservée */
-
-    .hint {
-      position: absolute;
-      bottom: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,.35);
-      color: #fff;
-      font-size: 12px;
-      padding: 6px 10px;
-      border-radius: 8px;
-      display: none;
-    }
-
-    .hint.show { display: inline-block; }
-
-    /* Boutons */
-    .controls {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      width: 100%;
-    }
-    button {
-      appearance: none;
-      padding: 10px 14px;
-      border-radius: 12px;
-      border: 0;
-      background: #2c2c2c;
-      color: #fff;
-      font-weight: 600;
-      cursor: pointer;
-      box-shadow: 0 6px 16px rgba(0,0,0,.15);
-    }
-    button:focus-visible { outline: 3px solid #00000022; }
-
-    .fs-label[aria-pressed="true"]::after { content: " (plein écran)"; font-weight: 400; opacity: .85; }
-
+    .controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    button{ appearance:none; border:0; cursor:pointer; padding:12px 16px; border-radius:12px; font-weight:600; background:#111827; color:#fff; box-shadow:var(--shadow); }
+    button:disabled{ opacity:.55; cursor:not-allowed; }
+    .hint{ font-size:.9rem; opacity:.75; }
+    kbd{ background:#111827; color:#fff; padding:.2em .45em; border-radius:6px; font-weight:700; }
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="wrapper">
-      <div class="slideshow" id="slideshow" tabindex="0" aria-label="Diaporama – utilisez Espace pour lecture/pause et ←/→ pour naviguer">
-        <div class="layer active" id="layerA"><img alt="" /></div>
-        <div class="layer" id="layerB"><img alt="" /></div>
-        <div class="overlay">
-          <span class="badge" id="stateBadge" hidden>
-            <!-- Icône pause (II) -->
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <rect x="6" y="4" width="4" height="16" rx="1.5" fill="currentColor"/>
-              <rect x="14" y="4" width="4" height="16" rx="1.5" fill="currentColor"/>
-            </svg>
-            Pause
-          </span>
-          <span class="hint" id="hint"></span>
-        </div>
-      </div>
-      <div class="controls">
-        <button id="fsBtn" class="fs-label" aria-pressed="false" title="Mettre en plein écran (Esc pour quitter)">Plein écran</button>
-      </div>
+  <div class="wrap" id="wrap">
+    <div id="stage" class="stage" aria-live="polite" aria-label="Diaporama">
+      <img class="layer a show" id="layerA" alt="Diapositive A" />
+      <img class="layer b" id="layerB" alt="Diapositive B" />
+    </div>
+    <div class="controls">
+      <button id="sizeBtn" type="button" aria-label="Agrandir le lecteur">Agrandir</button>
+      <span class="hint">
+        Raccourcis : <kbd>Espace</kbd> pause/lecture • <kbd>←</kbd>/<kbd>→</kbd> précédent/suivant
+      </span>
     </div>
   </div>
 
   <script>
-    // ————— Configuration ————————————————————————————————————————————————
-    const CONFIG = {
-      images: [
-        "001.png","002.png","003.png","004.png","005.png","006.png",
-        "0061.png","0062.png","0063.png",
-        "007.png","008.png","009.png","010.png",
-      ],
-      advanceDelayMs: 7000,   // 7s
-      fadeMs: 600,            // doit refléter --fade-ms du CSS
-      initialGateRequiresSpace: true, // à l'image 001: seule la barre d'espace démarre
+  (function(){
+    // --- Liste et règles ---
+    const files = [
+      "001","002","003","004","005","006","0061","0062","0063","007","008","009","010"
+    ].map(n=>`./${n}.png`);
+
+    const idx = {
+      first: 0,
+      stop1: files.indexOf("./006.png"),   // arrêt/pause sur 006
+      gateStart: files.indexOf("./006.png"),
+      gateEndNext: files.indexOf("./007.png"), // zone manuelle: 006..0063 (avant 007)
+      resumeAt: files.indexOf("./007.png"),
+      last: files.indexOf("./010.png")
     };
 
-    // ————— Éléments DOM ————————————————————————————————————————————————
-    const ss      = document.getElementById('slideshow');
-    const layerA  = document.getElementById('layerA');
-    const layerB  = document.getElementById('layerB');
-    const imgA    = layerA.querySelector('img');
-    const imgB    = layerB.querySelector('img');
-    const badge   = document.getElementById('stateBadge');
-    const hintEl  = document.getElementById('hint');
-    const fsBtn   = document.getElementById('fsBtn');
+    const wrap = document.getElementById('wrap');
+    const stage = document.getElementById('stage');
+    const layerA = document.getElementById('layerA');
+    const layerB = document.getElementById('layerB');
+    const sizeBtn = document.getElementById('sizeBtn');
 
-    // ————— État ————————————————————————————————————————————————————————
-    let idx = 0;                 // index courant dans CONFIG.images
-    let activeIsA = true;        // quelle couche est affichée
-    let timer = null;            // timeout ID pour l'auto-avance
-    let playing = false;         // lecture automatique en cours ?
-    let inManualGate = false;    // blocage manuel entre 006 et 007
-    let inInitialGate = CONFIG.initialGateRequiresSpace; // blocage initial sur 001
+    let current = idx.first;         // commence sur 001
+    let playing = false;             // lecture auto en cours ?
+    let timer = null;                // setTimeout id
+    let activeIsA = true;            // quel calque est à l'écran
 
-    // indices utiles
-    const IDX_001 = 0;
-    const IDX_006 = CONFIG.images.indexOf('006.png');
-    const IDX_007 = CONFIG.images.indexOf('007.png');
-    const IDX_010 = CONFIG.images.indexOf('010.png');
+    const activeLayer = () => activeIsA ? layerA : layerB;
+    const inactiveLayer = () => activeIsA ? layerB : layerA;
 
-    // ————— Préchargement ———————————————————————————————————————————————
-    const cache = new Map();
-    function preload(src) {
-      if (cache.has(src)) return;
-      const im = new Image();
-      im.src = src;
-      cache.set(src, im);
+    // Préchargement léger
+    const preload = (i)=>{ if(files[i]){ const p=new Image(); p.src=files[i]; } };
+
+    // Helpers règles
+    const isInManualGate = (i)=> i>=idx.gateStart && i<idx.gateEndNext; // 006, 0061, 0062, 0063
+    const isAutoAllowedAt = (i)=> (i>=1 && i<idx.stop1) || (i>=idx.resumeAt && i<idx.last);
+
+    function crossfadeTo(src){
+      const oldL = activeLayer();
+      const newL = inactiveLayer();
+      // Charger la prochaine image sur le calque caché, puis crossfade
+      const onload = () => {
+        // afficha ge : nouveau calque en fondu entrant, ancien en fondu sortant
+        newL.classList.add('show');
+        oldL.classList.remove('show');
+        activeIsA = !activeIsA; // inverser les rôles une fois l'anim lancée
+        newL.removeEventListener('load', onload);
+      };
+      newL.addEventListener('load', onload);
+      newL.setAttribute('src', src);
     }
-    CONFIG.images.forEach(preload);
 
-    // ————— Affichage initial ————————————————————————————————————————
-    function setCSSFade(ms) {
-      document.documentElement.style.setProperty('--fade-ms', ms + 'ms');
-    }
-    setCSSFade(CONFIG.fadeMs);
+    function show(i){
+      if(i<0) i=0; if(i>idx.last) i=idx.last;
+      current = i;
 
-    function showAt(index, {animate=true} = {}) {
-      index = Math.max(0, Math.min(CONFIG.images.length - 1, index));
-      const src = CONFIG.images[index];
-      const nextImg = activeIsA ? imgB : imgA;
-      nextImg.src = src;
-
-      // Crossfade
-      const nextLayer  = activeIsA ? layerB : layerA;
-      const currLayer  = activeIsA ? layerA : layerB;
-
-      if (!animate) {
-        currLayer.classList.remove('active');
-        nextLayer.classList.add('active');
+      const nextSrc = files[current];
+      // si premier affichage, mettre la première image directement
+      if(!layerA.getAttribute('src') && !layerB.getAttribute('src')){
+        layerA.setAttribute('src', nextSrc);
+        layerA.classList.add('show');
       } else {
-        nextLayer.offsetHeight; // reflow
-        nextLayer.classList.add('active');
-        currLayer.classList.remove('active');
+        // vrai crossfade 1s
+        if(activeLayer().getAttribute('src') !== nextSrc){
+          crossfadeTo(nextSrc);
+        }
       }
 
-      activeIsA = !activeIsA;
-      idx = index;
-      updateHints();
-    }
+      // Précharger la suivante
+      preload(current+1);
 
-    function updateHints() {
-      // Petites indications contextuelles (sans badge Pause)
-      if (inInitialGate && idx === IDX_001) {
-        hintEl.textContent = 'Appuyez sur ESPACE pour démarrer';
-        hintEl.classList.add('show');
-        showBadge(false);
-      } else if (inManualGate && idx >= IDX_006 && idx < IDX_007) {
-        hintEl.textContent = 'Utilisez ← / → pour avancer manuellement jusqu\'à 007';
-        hintEl.classList.add('show');
-        showBadge(false);
-      } else if (!playing) {
-        hintEl.textContent = 'Pause — ESPACE pour reprendre';
-        hintEl.classList.add('show');
-        showBadge(false);
-      } else {
-        hintEl.textContent = '';
-        hintEl.classList.remove('show');
-        showBadge(false);
-      }
-    } else if (inManualGate && idx >= IDX_006 && idx < IDX_007) {
-        hintEl.textContent = 'Utilisez ← / → pour avancer manuellement jusqu\'à 007';
-        hintEl.classList.add('show');
-        showBadge(true);
-      } else if (!playing) {
-        hintEl.textContent = 'Pause — ESPACE pour reprendre';
-        hintEl.classList.add('show');
-        showBadge(true);
-      } else {
-        hintEl.textContent = '';
-        hintEl.classList.remove('show');
-        showBadge(false);
-      }
-    }
-
-    function showBadge(show) {
-      badge.hidden = !show;
-    }
-
-    // ————— Lecture / Pause / Auto-avance ————————————————————————————
-    function scheduleNext() {
+      // Gestion des règles au moment de l'affichage
       clearTimer();
-      if (!playing) return;
 
-      // Stop si on est à la dernière image
-      if (idx >= IDX_010) {
-        setPlaying(false);
-        return;
-      }
-
-      // Blocage manuel déclenché à 006
-      if (idx === IDX_006) {
-        setPlaying(false);
-        inManualGate = true; // maintenant, flèches uniquement jusqu'à 007
-        updateHints();
-        return;
-      }
-
-      timer = setTimeout(() => {
-        // Si on va atteindre 006, on passe quand même (l'arrêt se fera au tick suivant)
-        goRelative(+1);
-
-        // Si on vient d\'atteindre 007 et qu\'on sortait du gate manuel, on relance (garanti ailleurs aussi)
-        if (idx === IDX_007 && inManualGate) {
-          inManualGate = false;
-          setPlaying(true);
-        } else {
-          scheduleNext();
+      if(current===idx.first){
+        playing = false; // 001: en pause initiale
+      } else if(current===idx.stop1){
+        // Arrêt automatique sur 006
+        playing = false;
+      } else if(current===idx.resumeAt){
+        // À 007 : reprise auto immédiate (si pas en fin de diapo)
+        if(current<idx.last){
+          playing = true; scheduleNext();
         }
-      }, CONFIG.advanceDelayMs);
+      } else if(isAutoAllowedAt(current) && playing){
+        scheduleNext();
+      }
+
+      updateSizeBtn();
     }
 
-    function clearTimer() {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
+    function scheduleNext(){
+      clearTimer();
+      if(!isAutoAllowedAt(current)) return;
+      timer = setTimeout(()=>{ go(+1, /*autoTick*/true); }, 7000);
+    }
+    function clearTimer(){ if(timer){ clearTimeout(timer); timer=null; } }
+
+    function go(step=+1, autoTick=false){
+      let next = current + step;
+      if(next<0) next=0; if(next>idx.last) next=idx.last;
+      if(autoTick && (next>current) && isInManualGate(next)){
+        playing = false; show(current); return;
       }
+      show(next);
     }
 
-    function setPlaying(next) {
-      playing = !!next;
-      updateHints();
-      if (playing) scheduleNext(); else clearTimer();
-    }
-
-    // ————— Navigation ———————————————————————————————————————————————
-    function goRelative(delta) {
-      let target = idx + delta;
-      target = Math.max(0, Math.min(CONFIG.images.length - 1, target));
-      if (target === idx) return;
-      showAt(target);
-
-      // Règles spéciales après navigation manuelle
-      if (inInitialGate && idx > IDX_001) {
-        // Théoriquement impossible car on bloque les flèches au gate initial
-        inInitialGate = false;
+    // --- Contrôles clavier ---
+    window.addEventListener('keydown', (e)=>{
+      if([" ","Spacebar","Space"].includes(e.key)) e.preventDefault();
+      switch(e.key){
+        case ' ': case 'Spacebar': case 'Space':
+          if(current===idx.first){
+            show(current+1); playing = true; scheduleNext();
+          } else if(isInManualGate(current)){
+            // pas d'effet dans la zone manuelle
+          } else if(current===idx.last){
+            playing = false; clearTimer();
+          } else {
+            playing = !playing; if(playing){ scheduleNext(); } else { clearTimer(); }
+          }
+        break;
+        case 'ArrowRight': go(+1); break;
+        case 'ArrowLeft' : go(-1); break;
+        default: break;
       }
+    }, {passive:false});
 
-      if (inManualGate && idx === IDX_007) {
-        inManualGate = false;
-        setPlaying(true);
-      }
-
-      if (idx >= IDX_010) {
-        setPlaying(false);
-      }
-    }
-
-    // ————— Gestion du clavier ————————————————————————————————————————
-    function onKey(e) {
-      // Empêche le scroll avec barre d'espace
-      if (e.code === 'Space') e.preventDefault();
-
-      // Gate initial : seule la barre d'espace permet de démarrer (001 → 002)
-      if (inInitialGate && idx === IDX_001) {
-        if (e.code === 'Space') {
-          inInitialGate = false;
-          showAt(IDX_001 + 1); // va à 002
-          setPlaying(true);
-        }
-        return; // autres touches ignorées au gate initial
-      }
-
-      // Gate manuel (entre 006 et 007) : flèches uniquement
-      if (inManualGate) {
-        if (e.key === 'ArrowRight') {
-          goRelative(+1);
-        } else if (e.key === 'ArrowLeft') {
-          goRelative(-1);
-        }
-        return; // espace n'a pas d'effet en gate manuel
-      }
-
-      // Contrôles généraux
-      switch (e.key) {
-        case ' ': // Espace (certaines implémentations)
-        case 'Spacebar':
-        case 'Space':
-          setPlaying(!playing);
-          break;
-        case 'ArrowRight':
-          goRelative(+1);
-          break;
-        case 'ArrowLeft':
-          goRelative(-1);
-          break;
-      }
-    }
-
-    // ————— Plein écran ———————————————————————————————————————————————
-    async function toggleFullscreen() {
-      try {
-        if (!document.fullscreenElement) {
-          await ss.requestFullscreen();
-          fsBtn.setAttribute('aria-pressed', 'true');
-        } else {
-          await document.exitFullscreen();
-          fsBtn.setAttribute('aria-pressed', 'false');
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    document.addEventListener('fullscreenchange', () => {
-      const on = !!document.fullscreenElement;
-      fsBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    // --- Mode "Agrandir" (théâtre) ---
+    function isTheater(){ return wrap.classList.contains('theater'); }
+    function updateSizeBtn(){ sizeBtn.textContent = isTheater()? 'Réduire' : 'Agrandir'; }
+    sizeBtn.addEventListener('click', ()=>{
+      wrap.classList.toggle('theater');
+      updateSizeBtn();
     });
 
-    // ————— Initialisation ————————————————————————————————————————————
-    function init() {
-      // Image 001 dès l'arrivée
-      showAt(IDX_001, {animate:false});
-
-      // Focus pour capter le clavier (un clic sur le cadre marche aussi)
-      ss.focus({preventScroll:true});
-
-      // État de pause affiché
-      updateHints();
-    }
-
-    // Écoutes
-    document.addEventListener('keydown', onKey);
-    fsBtn.addEventListener('click', toggleFullscreen);
-    ss.addEventListener('click', () => ss.focus());
-
-    // Lancement
-    init();
+    // --- Démarrage : afficher 001 (pausé) ---
+    show(current);
+  })();
   </script>
 </body>
 </html>
